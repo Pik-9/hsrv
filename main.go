@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -36,12 +37,12 @@ func prettyPrint(next http.Handler) http.Handler {
 	})
 }
 
-func createServer(dir string) http.Server {
+func createServer(dir string, port int) http.Server {
 	mux := http.NewServeMux()
 	fserver := http.FileServer(http.Dir(dir))
 	mux.Handle("/", prettyPrint(fserver))
 	return http.Server{
-		Addr:              "localhost:8080",
+		Addr:              fmt.Sprintf("localhost:%d", port),
 		Handler:           mux,
 		ReadHeaderTimeout: 3 * time.Second,
 		ReadTimeout:       3 * time.Second,
@@ -67,31 +68,32 @@ func shutdownServerOnSignal(srv *http.Server, connsClosed chan<- struct{}) {
 func main() {
 	var (
 		directory string
+		port      int
 		err       error
 	)
 
-	if len(os.Args) > 1 {
-		directory, err = filepath.Abs(os.Args[1])
-		if err != nil {
-			log.Println(err)
-			directory, err = os.Getwd()
-			if err != nil {
-				log.Fatal(err)
-			}
-			log.Println("Using current working directory instead.")
-		}
+	curDir, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	flag.IntVar(&port, "p", 8080, "The port to listen on.")
+	flag.Parse()
+
+	if flag.Arg(0) == "" {
+		directory = curDir
 	} else {
-		directory, err = os.Getwd()
+		directory, err = filepath.Abs(flag.Arg(0))
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	allConnsClosed := make(chan struct{})
-	srv := createServer(directory)
+	srv := createServer(directory, port)
 	go shutdownServerOnSignal(&srv, allConnsClosed)
 
-	fmt.Printf("Serving files from \033[0;33m%s\033[0m\n", directory)
+	fmt.Printf("Serving files from \033[0;33m%s\033[0m on \033[0;32m%s\033[0m\n", directory, srv.Addr)
 
 	err = srv.ListenAndServe()
 	if err != nil && err != http.ErrServerClosed {

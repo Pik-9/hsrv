@@ -1,3 +1,3 @@
-module github.com/Pik-9/hserve
+module github.com/Pik-9/hsrv
 
 go 1.19
